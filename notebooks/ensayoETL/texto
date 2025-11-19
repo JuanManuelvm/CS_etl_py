@@ -1,0 +1,247 @@
+import pandas as pd
+from sqlalchemy import create_engine
+import yaml
+
+with open('C:/Users/WILSON/OneDrive/Escritorio/Septimo Semestre/CIENCIA DE DATOS/REPO_MONITOR/CS_etl_py/config.yml', 'r') as f:
+    config = yaml.safe_load(f)
+    config_co = config['CO_SA']
+    config_etl = config['ETL_PRO']
+    
+url_co = (f"{config_co['drivername']}://{config_co['user']}:{config_co['password']}@{config_co['host']}:{config_co['port']}/{config_co['dbname']}")
+url_etl = (f"{config_etl['drivername']}://{config_etl['user']}:{config_etl['password']}@{config_etl['host']}:"f"{config_etl['port']}/{config_etl['dbname']}")
+co_sa = create_engine(url_co)
+etl_Adventure = create_engine(url_etl)
+
+def load_table(schema, table):
+    query = f"SELECT * FROM {schema}.{table}"
+    return pd.read_sql(query, co_sa)
+
+
+salesorderheader = load_table("sales", "salesorderheader")
+salesorderdetail = load_table("sales", "salesorderdetail")
+customer = load_table("sales", "customer")
+personcreditcard = load_table("sales", "personcreditcard")
+salesperson = load_table("sales", "salesperson")
+store = load_table("sales", "store")
+specialoffer = load_table("sales", "specialoffer")
+specialofferproduct = load_table("sales", "specialofferproduct")
+salesterritory = load_table("sales", "salesterritory")
+currency = load_table("sales", "currency")
+currencyrate = load_table("sales", "currencyrate")
+
+person = load_table("person", "person")
+address = load_table("person", "address")
+businessentity = load_table("person", "businessentity")
+businessentityaddress = load_table("person", "businessentityaddress")
+stateprovince = load_table("person", "stateprovince")
+countryregion = load_table("person", "countryregion")
+
+
+product = load_table("production", "product")
+subcategory = load_table("production", "productsubcategory")
+category = load_table("production", "productcategory")
+
+employee = load_table("humanresources", "employee")
+emp_history = load_table("humanresources", "employeedepartmenthistory")
+department = load_table("humanresources", "department")
+
+#DIMENCION DATOS
+def build_dimdate(df, colname):
+    date_df = pd.DataFrame()
+    date_df["date"] = pd.to_datetime(df[colname].dropna().unique())
+
+    date_df["datekey"] = date_df["date"].dt.strftime("%Y%m%d").astype(int)
+    date_df["year"] = date_df["date"].dt.year
+    date_df["month"] = date_df["date"].dt.month
+    date_df["day"] = date_df["date"].dt.day
+    date_df["quarter"] = date_df["date"].dt.quarter
+    date_df["is_weekend"] = (date_df["date"].dt.weekday >= 5).astype(int)
+
+    return date_df
+
+dimdate_order = build_dimdate(salesorderheader, "orderdate")
+dimdate_due = build_dimdate(salesorderheader, "duedate")
+dimdate_ship = build_dimdate(salesorderheader, "shipdate")
+
+
+#DIMENSION CURRENCY
+currencyrate = currencyrate.rename(columns={'tocurrencycode': 'currencycode'})
+dimcurrency = currency.merge(currencyrate, on="currencycode", how="left")
+dimcurrency
+
+
+
+#DIMENCION CUSTOMER SOLO VENTAS POR INTERNET
+customer = customer.rename(columns={'personid': 'businessentityid'})
+customer = customer.drop(columns=['rowguid', 'modifieddate','accountnumber'])
+internet_customers = customer[customer["storeid"].isna()]
+cust = (internet_customers.merge(person, on="businessentityid", how="left"))
+cust = cust.rename(columns={"territoryid": "territoryidCustomer"})
+cust = cust[['customerid','businessentityid','territoryidCustomer','firstname','lastname']]
+businessentityaddress = businessentityaddress[['businessentityid', 'addressid']]
+address = address[['addressid','addressline1', 'stateprovinceid', 'city']]
+stateprovince = stateprovince[['stateprovinceid','countryregioncode', 'territoryid']]
+cust = cust.merge(businessentityaddress, on="businessentityid", how="left")
+cust = cust[['customerid','businessentityid','firstname','lastname','addressid']]
+cust = cust.merge(address, on="addressid", how="left")
+cust = cust.merge(stateprovince, on="stateprovinceid", how="left")
+dimcustomer = cust[[
+    "customerid",
+    "firstname",
+    "lastname",
+    "addressline1",
+    "city",
+    "stateprovinceid",
+    "countryregioncode",
+    "territoryid"
+]].drop_duplicates()
+dimcustomer
+
+#---------DIMENSION REVENDEDORES
+
+reseller = customer[customer["storeid"].notnull()]
+storeRevendedoreid = store
+storeRevendedoreid = storeRevendedoreid.rename(columns={'businessentityid':'storeid'})
+reseller = reseller.merge(storeRevendedoreid, on="storeid", how="left")
+dimreseller = reseller[[
+    "customerid",
+    "storeid",
+    "name",
+    "businessentityid"
+]].drop_duplicates()
+dimreseller
+
+#DIMENSIÓN EMPLEADO
+employeeMerge = employee.drop(columns={'rowguid','modifieddate'})
+dimemployee = employeeMerge.merge(emp_history, on="businessentityid", how="left")
+dimemployee = dimemployee.drop(columns={'modifieddate'})
+dimemployee = dimemployee[['businessentityid','jobtitle', 'loginid', 'departmentid' ]]
+departmentMerge = department
+departmentMerge = departmentMerge[['departmentid', 'name', 'groupname']]
+dimemployee = dimemployee.merge(departmentMerge, on="departmentid", how="left")
+salespersonMerge = salesperson
+personMerge = person
+salespersonMerge = salespersonMerge[['businessentityid','territoryid']]
+personMerge = personMerge[['businessentityid','firstname','lastname']]
+dimemployee = dimemployee.merge(salespersonMerge, on="businessentityid", how="left")
+dimemployee = dimemployee.merge(personMerge, on="businessentityid", how="left")
+dimemployee = dimemployee.rename(columns={"businessentityid": "employeekey",'name':'departmentname'})
+dimemployee
+
+
+#dimencion producto
+dimproduct = product[['productsubcategoryid','name','color', 'size','listprice']]
+subcategoryMerge = subcategory.rename(columns={'name':'productsubcategoryname'})
+dimproduct = product.merge(subcategoryMerge, on = "productsubcategoryid", how="left")
+categoryMerge = category.rename(columns={'name':'productcategoryname'})
+dimproduct = dimproduct.merge(categoryMerge, on="productcategoryid", how="left")
+dimproduct = dimproduct[[
+    "productid",
+    "name",
+    "color",
+    "size",
+    "productsubcategoryid",
+    "productsubcategoryname",
+    "productcategoryid",
+    "productcategoryname",
+    "listprice"
+]].drop_duplicates()
+dimproduct
+
+#DIMENSION PROMOCION
+dimpromotion = (
+    specialoffer
+    .merge(specialofferproduct, on="specialofferid", how="left")
+)[[
+    "specialofferid",
+    "description",
+    "discountpct",
+    "startdate",
+    "enddate",
+    "productid",
+    "category",
+    "type",
+    "minqty",
+    "maxqty"
+]].drop_duplicates()
+dimpromotion
+
+#DIM SALES TERRITORY
+dimsalesterritory = salesterritory[[
+    "territoryid",
+    "name",
+    "countryregioncode",
+    "group"
+]].drop_duplicates()
+dimsalesterritory
+
+#HECHO VENTAS POR INTERNET
+internet_sales = salesorderheader[salesorderheader["onlineorderflag"] == True]
+factInternet = (internet_sales.merge(salesorderdetail, on="salesorderid"))
+factInternet = factInternet.merge(dimproduct, on="productid", how="left")
+mergedimecustomer = dimcustomer
+mergedimecustomer = mergedimecustomer.rename(columns={'territoryid': 'territoryidCustomer'})
+factInternet = factInternet.merge(mergedimecustomer, on="customerid", how="left")
+factInternet = factInternet.merge(dimpromotion, on="productid", how="left")
+factInternet = factInternet.merge(dimsalesterritory, on="territoryid", how="left")
+# Generar claves de fecha
+factInternet["orderdatekey"] = pd.to_datetime(factInternet["orderdate"]).dt.strftime("%Y%m%d").astype(int)
+factInternet["duedatekey"] = pd.to_datetime(factInternet["duedate"]).dt.strftime("%Y%m%d").astype(int)
+factInternet["shipdatekey"] = pd.to_datetime(factInternet["shipdate"]).dt.strftime("%Y%m%d").astype(int)
+factInternet = factInternet[[
+    "salesorderid",
+    "productid",
+    "customerid",
+    "territoryid",
+    "orderqty",
+    "unitprice",
+    "unitpricediscount",
+    "freight",
+    "taxamt",
+    "totaldue",
+    "orderdatekey",
+    "duedatekey",
+    "shipdatekey"
+]]
+factInternet
+
+#HECHO VENTAS POR REVENDEDORES  
+customerMergeRevendedores = customer
+salespersonCopiaTerritory = salesperson[['territoryid', 'businessentityid']]
+customerMergeRevendedores = customerMergeRevendedores[['customerid','storeid']]
+reseller_sales = salesorderheader[(salesorderheader["onlineorderflag"] == False)]
+reseller_sales = reseller_sales.merge(customerMergeRevendedores, on="customerid", how="left")
+reseller_sales = reseller_sales.merge(salespersonCopiaTerritory, on="territoryid", how="left")
+reseller_sales = reseller_sales[(reseller_sales["storeid"].notnull())]
+dimemployee = dimemployee.rename(columns={'territoryid': 'territoryidDimEmployee'})
+
+factReseller = (
+    reseller_sales
+    .merge(salesorderdetail, on="salesorderid")
+    .merge(dimproduct, on="productid", how="left")
+    .merge(dimemployee, left_on="businessentityid", right_on="employeekey", how="left")
+    .merge(dimreseller, on="storeid", how="left")
+    .merge(dimpromotion, on="productid", how="left")
+    .merge(dimsalesterritory, on="territoryid", how="left")
+)
+factReseller["orderdatekey"] = pd.to_datetime(factReseller["orderdate"]).dt.strftime("%Y%m%d").astype(int)
+factReseller["duedatekey"] = pd.to_datetime(factReseller["duedate"]).dt.strftime("%Y%m%d").astype(int)
+factReseller["shipdatekey"] = pd.to_datetime(factReseller["shipdate"]).dt.strftime("%Y%m%d").astype(int)
+factReseller = factReseller[[
+    "salesorderid",
+    "productid",
+    "storeid",
+    "employeekey",
+    "territoryid",
+    "orderqty",
+    "unitprice",
+    "unitpricediscount",
+    "freight",
+    "taxamt",
+    "totaldue",
+    "orderdatekey",
+    "duedatekey",
+    "shipdatekey"
+]]
+factReseller= factReseller.rename(columns={'employeekey':'businessentityid'})
+factReseller

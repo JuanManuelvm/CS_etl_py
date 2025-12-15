@@ -8,8 +8,7 @@ def load_dataframe(df: pd.DataFrame,
                    schema: str = "public",
                    if_exists: str = "replace") -> None:
     """
-    Carga un DataFrame a la base destino usando to_sql.
-    - schema: schema donde vivirán los datamarts (cámbialo si ya tienes otro)
+    Cargamos un DataFrame a la base destino usando to_sql.
     """
     df.to_sql(
         name=table_name,
@@ -24,7 +23,7 @@ def load_dimensions(dimensions: dict[str, pd.DataFrame],
                     engine: Engine,
                     schema: str = "public") -> None:
     """
-    Carga todas las dimensiones al DW.
+    Cargamoa todas las dimensiones al DW.
     """
     for name, df in dimensions.items():
         # opcional: asegurar minúsculas
@@ -36,7 +35,7 @@ def load_facts(facts: dict[str, pd.DataFrame],
                engine: Engine,
                schema: str = "public") -> None:
     """
-    Carga todas las tablas de hechos al DW.
+    Cargamoa todas las tablas de hechos al DW.
     """
     for name, df in facts.items():
         table_name = name.lower()

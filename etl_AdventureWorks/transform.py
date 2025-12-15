@@ -5,8 +5,7 @@ import pandas as pd
 
 def build_dimdate_from_header(salesorderheader: pd.DataFrame) -> pd.DataFrame:
     """
-    Construye una sola dimensión de fechas (dimdate) a partir de las columnas
-    orderdate, duedate y shipdate de salesorderheader.
+    contruimos una sola dimensión de fechas (dimdate).
     """
     # Unimos todas las columnas de fecha
     all_dates = pd.concat([
@@ -25,8 +24,6 @@ def build_dimdate_from_header(salesorderheader: pd.DataFrame) -> pd.DataFrame:
     dimdate["day"] = dimdate["date"].dt.day
     dimdate["quarter"] = dimdate["date"].dt.quarter
     dimdate["is_weekend"] = (dimdate["date"].dt.weekday >= 5).astype(int)
-
-    # opcional: ordenamos por datekey
     dimdate = dimdate.sort_values("datekey").reset_index(drop=True)
 
     return dimdate
@@ -52,8 +49,6 @@ def build_dimensions(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     Construye todas las DIMENSIONES a partir de los DataFrames crudos.
     """
     salesorderheader = raw["salesorderheader"]
-    currency = raw["currency"].copy()
-    currencyrate = raw["currencyrate"].copy()
     customer = raw["customer"].copy()
     person = raw["person"].copy()
     address = raw["address"].copy()
@@ -74,15 +69,10 @@ def build_dimensions(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     # --- FECHAS ---
     dimdate = build_dimdate_from_header(salesorderheader)
 
-    # --- CURRENCY ---
-    currencyrate = currencyrate.rename(columns={'tocurrencycode': 'currencycode'})
-    dimcurrency = currency.merge(currencyrate, on="currencycode", how="left")
-
+  
     # --- CUSTOMER (INTERNET) ---
     customer = customer.rename(columns={'personid': 'businessentityid'})
     customer = customer.drop(columns=['rowguid', 'modifieddate', 'accountnumber'])
-
-    # Clientes SOLO internet
     internet_customers = customer[customer["storeid"].isna()].copy()
 
     cust = (
@@ -182,7 +172,7 @@ def build_dimensions(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         "minqty",
         "maxqty"
     ]].drop_duplicates()
-    #nueva
+
     dimpromotion = add_surrogate_key(dimpromotion, "promotion_key")
 
     # --- SALES TERRITORY ---
@@ -196,7 +186,6 @@ def build_dimensions(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 
     dimensions = {
         "dimdate": dimdate,
-        "dimcurrency": dimcurrency,
         "dimcustomer": dimcustomer,
         "dimreseller": dimreseller,
         "dimemployee": dimemployee,
@@ -213,7 +202,7 @@ def build_dimensions(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 def build_facts(raw: dict[str, pd.DataFrame],
                 dims: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     """
-    Construye las tablas de HECHO para:
+    Construimos las tablas de HECHO para:
     - Ventas por internet
     - Ventas por revendedores
     Usando surrogate keys de las dimensiones.
@@ -230,9 +219,8 @@ def build_facts(raw: dict[str, pd.DataFrame],
     dimsalesterritory = dims["dimsalesterritory"]
     dimpromotion = dims["dimpromotion"]  
 
-    # ---- DataFrames auxiliares solo con claves (business -> surrogate) ----
-    # Aseguramos UNA sola fila por clave de negocio para evitar duplicados en las facts
-
+    # ---- DataFrames auxiliares solo con claves----
+    
     # Producto: 1 fila por productid
     dimproduct_keys = (
         dimproduct[["productid", "product_key"]]
@@ -271,20 +259,20 @@ def build_facts(raw: dict[str, pd.DataFrame],
 
 
     # ---------- FACT VENTAS POR INTERNET ----------
-    #Cambio esto
+    
     internet_sales = salesorderheader[salesorderheader["onlineorderflag"] == True].copy()
-    # Header + detail (aquí viene salesorderdetailid)
+   
     factInternet = internet_sales.merge(salesorderdetail, on="salesorderid")
-    # Nos aseguramos de tener UNA fila por línea de detalle
+    
     factInternet = factInternet.drop_duplicates(subset=["salesorderdetailid"]).copy()
-    #hasta aqui
-    # 🔗 Producto (productid -> product_key)
+  
+    # Producto (productid -> product_key)
     factInternet = factInternet.merge(dimproduct_keys, on="productid", how="left")
 
-    # 🔗 Cliente (customerid -> customer_key)
+    # Cliente (customerid -> customer_key)
     factInternet = factInternet.merge(dimcustomer_keys, on="customerid", how="left")
 
-    # 🔗 Territorio (territoryid -> territory_key)
+    # Territorio (territoryid -> territory_key)
     factInternet = factInternet.merge(dimterritory_keys, on="territoryid", how="left")
     #promotions
     factInternet = factInternet.merge(
@@ -292,12 +280,11 @@ def build_facts(raw: dict[str, pd.DataFrame],
         on=["specialofferid", "productid"],
         how="left"
     )
-    # Claves de fecha (apuntan a dimdate.datekey)
+    # Claves de fecha
     factInternet["orderdatekey"] = pd.to_datetime(factInternet["orderdate"]).dt.strftime("%Y%m%d").astype(int)
     factInternet["duedatekey"] = pd.to_datetime(factInternet["duedate"]).dt.strftime("%Y%m%d").astype(int)
     factInternet["shipdatekey"] = pd.to_datetime(factInternet["shipdate"]).dt.strftime("%Y%m%d").astype(int)
 
-    # Nos quedamos solo con surrogate keys + medidas
     factInternet = factInternet[[
         "salesorderid",
         "salesorderdetailid",
@@ -317,7 +304,6 @@ def build_facts(raw: dict[str, pd.DataFrame],
     ]]
 
     # ---------- FACT VENTAS POR REVENDEDORES ----------
-    # Preparamos info de customer y salesperson
     customerMergeRevendedores = customer[['customerid', 'storeid']].copy()
     salespersonCopiaTerritory = salesperson[['territoryid', 'businessentityid']].copy()
 
@@ -326,17 +312,16 @@ def build_facts(raw: dict[str, pd.DataFrame],
     reseller_sales = reseller_sales.merge(salespersonCopiaTerritory, on="territoryid", how="left")
     reseller_sales = reseller_sales[reseller_sales["storeid"].notnull()]
 
-    #cambio aqui
     # Header + detail
     factReseller = reseller_sales.merge(salesorderdetail, on="salesorderid")
-    # UNA fila por línea de detalle
+
     factReseller = factReseller.drop_duplicates(subset=["salesorderdetailid"]).copy()
 
-    #hasta aqui
-    # 🔗 Producto
+
+    # Producto
     factReseller = factReseller.merge(dimproduct_keys, on="productid", how="left")
 
-    # 🔗 Empleado (businessentityid -> employeekey -> employee_key)
+    # Empleado 
     factReseller = factReseller.merge(
         dimemployee_keys,
         left_on="businessentityid",
@@ -344,13 +329,13 @@ def build_facts(raw: dict[str, pd.DataFrame],
         how="left"
     )
 
-    # 🔗 Reseller (storeid -> reseller_key)
+    # Reseller (storeid -> reseller_key)
     factReseller = factReseller.merge(dimreseller_keys, on="storeid", how="left")
 
-    # 🔗 Territorio
+    # Territorio
     factReseller = factReseller.merge(dimterritory_keys, on="territoryid", how="left")
 
-    # 🔗 Promoción
+    # Promoción
     factReseller = factReseller.merge(
         dimpromotion_keys,
         on=["specialofferid", "productid"],

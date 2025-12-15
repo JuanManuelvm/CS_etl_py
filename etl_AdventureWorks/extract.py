@@ -4,18 +4,18 @@ import yaml
 from sqlalchemy.engine import Engine
 
 
-CONFIG_PATH = 'C:/Users/WILSON/OneDrive/Escritorio/Septimo Semestre/CIENCIA DE DATOS/REPO_MONITOR/CS_etl_py/config.yml'  # Ajusta la ruta si es necesario
+CONFIG_PATH = '././config.yml'
 
 
 def get_engines() -> tuple[Engine, Engine]:
     """
     Crea y retorna los engines de conexión:
-    - co_sa: origen (AdventureWorks2022)
+    - BD_ADVENTURE: origen (AdventureWorks2022)
     - etl_Adventure: destino (bodega / DW)
     """
     with open(CONFIG_PATH, 'r') as f:
         config = yaml.safe_load(f)
-        config_co = config['CO_SA']
+        config_co = config['BD_ADVENTURE']
         config_etl = config['ETL_PRO']
 
     url_co = (
@@ -28,10 +28,10 @@ def get_engines() -> tuple[Engine, Engine]:
         f"@{config_etl['host']}:{config_etl['port']}/{config_etl['dbname']}"
     )
 
-    co_sa = create_engine(url_co)
+    bd_adventure = create_engine(url_co)
     etl_Adventure = create_engine(url_etl)
 
-    return co_sa, etl_Adventure
+    return bd_adventure, etl_Adventure
 
 
 def load_table(schema: str, table: str, engine: Engine) -> pd.DataFrame:
@@ -59,8 +59,6 @@ def extract_raw_data(source_engine: Engine) -> dict[str, pd.DataFrame]:
     raw["specialoffer"] = load_table("sales", "specialoffer", source_engine)
     raw["specialofferproduct"] = load_table("sales", "specialofferproduct", source_engine)
     raw["salesterritory"] = load_table("sales", "salesterritory", source_engine)
-    raw["currency"] = load_table("sales", "currency", source_engine)
-    raw["currencyrate"] = load_table("sales", "currencyrate", source_engine)
 
     # Schema person
     raw["person"] = load_table("person", "person", source_engine)

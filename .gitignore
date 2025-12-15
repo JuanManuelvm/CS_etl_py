@@ -7,3 +7,5 @@ test*
 *.pbix
 *.sql
 *.pyc
+# Entorno virtual Python
+entorno/

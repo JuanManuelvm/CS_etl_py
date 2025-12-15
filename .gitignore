@@ -1,11 +1,10 @@
 .idea
 *.txt
-config.yml
 *.db
 test*
 *.csv
 *.pbix
 *.sql
 *.pyc
-# Entorno virtual Python
+# Entorno virtual Python--
 entorno/

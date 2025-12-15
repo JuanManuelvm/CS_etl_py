@@ -9,6 +9,7 @@ def load_dataframe(df: pd.DataFrame,
                    if_exists: str = "replace") -> None:
     """
     Cargamos un DataFrame a la base destino usando to_sql.
+    ----------------------------------
     """
     df.to_sql(
         name=table_name,

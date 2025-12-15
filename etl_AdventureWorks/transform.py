@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-# --------- DIMENSIÓN FECHA ---------
+# --------- DIMENSIÓN FECHA -----------
 
 def build_dimdate_from_header(salesorderheader: pd.DataFrame) -> pd.DataFrame:
     """

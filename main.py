@@ -11,7 +11,7 @@ def main():
     dimensions = transform.build_dimensions(raw_data)
     facts = transform.build_facts(raw_data, dimensions)
 
-    # 4. LOAD (DATAMARTS: internet y revendedores comparten dimensiones)
+    # 4. LOAD (DATAMARTS:  internet y revendedores comparten dimensiones)
     load.load_dimensions(dimensions, target_engine, schema="public")
     load.load_facts(facts, target_engine, schema="public")
      # 5. Validación rápida
@@ -29,7 +29,7 @@ def main():
     for name, df in facts.items():
         suma2+=len(df)
         print(name, len(df))
-    print("Total filas:", suma+suma2)
+    print("Total filas: ", suma+suma2)
 
 if __name__ == "__main__":
     main()

@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 import yaml
 from sqlalchemy.engine import Engine
 
-
+#ruta del archivo de configuración
 CONFIG_PATH = '././config.yml'
 
 

@@ -1,0 +1,17 @@
+BD_ADVENTURE:
+  drivername: postgresql
+  dbname: AdventureWorks2022
+  user: postgres
+  password: 3118068685
+  host: localhost
+  port: 5432
+
+ETL_PRO:
+  drivername: postgresql
+  dbname: prueba2
+  user: postgres
+  password: 3118068685
+  host: localhost
+  port: 5432
+
+

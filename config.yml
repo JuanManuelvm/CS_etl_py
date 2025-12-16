@@ -8,7 +8,7 @@ BD_ADVENTURE:
 
 ETL_PRO:
   drivername: postgresql
-  dbname: prueba2
+  dbname: bodegaCienciaDatos
   user: postgres
   password: 3118068685
   host: localhost

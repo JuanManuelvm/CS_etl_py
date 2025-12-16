@@ -3,7 +3,6 @@
 *.db
 test*
 *.csv
-*.pbix
 *.sql
 *.pyc
 # Entorno virtual Python--
